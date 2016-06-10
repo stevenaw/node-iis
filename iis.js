@@ -99,6 +99,95 @@ var IIS = function() {
             var map_cmd = ' set app /app.name:"' + app_name + '" /applicationPool:' + pool_name;
             exec(this.appcmd + ' ' + map_cmd,cb);
         },
+        addSiteBinding : function(options,cb) {
+            var self = this;
+            options = options ||
+            {
+                site : null,
+                bindingInfo: null,
+                protocol:'http',
+                host: '*',
+                ip: '*',
+                port: '80'
+            };
+
+            options.site = options.site || self.last_site;
+
+            self.exists('site',options.site,function(err,tf) {
+                if (tf) {
+                    var site_cmd = ' set site /site.name:"' + options.site + '"';
+                    var bindingInfo = options.bindingInfo
+                        ? ' /+bindings.[' + options.bindingInfo + ']'
+                        :  (' /+bindings.[protocol=\'' + options.protocol
+                            + '\',bindingInformation=\'' + options.ip
+                            + ':' + options.port
+                            + ':' + options.host
+                            + '\']');
+
+                    site_cmd += bindingInfo;
+
+                    exec(self.appcmd + ' ' + site_cmd,cb);
+                }
+            });
+        },
+        createApplication : function(options,cb) {
+            var self = this;
+
+            var siteName = typeof(options) == 'string' ? null : options.site;
+            var applicationName = typeof(options) == 'string' ? options : options.name;
+            var physicalPath = typeof(options) == 'string' ? null : options.path;
+
+            siteName = siteName || self.last_site;
+
+            var fullName = siteName + '/' + applicationName;
+
+            self.exists('app', fullName, function(err,tf) {
+                if (!tf) {
+                    var site_cmd = ' add app /site.name:"' + siteName + '"';
+
+                    site_cmd += ' /path:"' + applicationName + '"';
+
+                    if (physicalPath) {
+                        site_cmd += ' /physicalPath:"' + physicalPath + '"';
+                    }
+
+                    exec(self.appcmd + ' ' + site_cmd,cb);
+                }
+                else {
+                    cb(err,'App ' + fullName + ' exists');
+                }
+            });
+        },
+        createVirtualDirectory : function(options,cb) {
+            var self = this;
+
+            options = options ||
+            {
+                site: null,
+                application: null,
+                name : 'Content',
+                path: null
+            };
+
+            options.site = options.site || self.last_site;
+
+            var fullAppName = options.site + '/' + (options.application || '');
+            var fullName = fullAppName + (fullAppName.endsWith('/') ? '' : '') + options.name;
+
+            self.exists('vdir', fullName, function(err,tf) {
+                if (!tf) {
+                    var site_cmd = ' add vdir /app.name:"' + fullAppName + '"';
+
+                    site_cmd += ' /path:"' + options.name + '"';
+                    site_cmd += ' /physicalPath:"' + options.path + '"';
+
+                    exec(self.appcmd + ' ' + site_cmd,cb);
+                }
+                else {
+                    cb(err,'VDir ' + fullName + ' exists');
+                }
+            });
+        },
         setAppPoolIdentity : function(pool_name,identity,cb) {
             var set_cmd = " set config /section:applicationPools /[name='" + pool_name + "'].processModel.identityType:" + identity;
             exec(this.appcmd + ' ' + set_cmd,cb);
