@@ -10,6 +10,14 @@ var os = require("os");
 var xml2js = require('xml2js');
 var _ = require('underscore');
 
+const defaultBindingInfo = {
+                site : null,
+                bindingInfo: null,
+                protocol:'http',
+                host: '*',
+                ip: '*',
+                port: '80'
+            };
 
 var IIS = function() {
     return {
@@ -99,32 +107,67 @@ var IIS = function() {
             var map_cmd = ' set app /app.name:"' + app_name + '" /applicationPool:' + pool_name;
             exec(this.appcmd + ' ' + map_cmd,cb);
         },
-        addSiteBinding : function(options,cb) {
+        buildBindingInfo : function(protocol, ip, host, port) {
+            return 'protocol=\'' + protocol + '\',bindingInformation=\'' + ip + ':' + port + ':' + host + '\'';
+        },
+        siteBindingExists : function(siteName, binding, cb) {
             var self = this;
-            options = options ||
-            {
-                site : null,
-                bindingInfo: null,
-                protocol:'http',
-                host: '*',
-                ip: '*',
-                port: '80'
-            };
+
+            binding = Object.assign({}, defaultBindingInfo, binding);
+            siteName = siteName || self.last_site;
+
+            self.list('site',function(err,res) {
+
+                var match = null;
+
+                if (!err) {
+                    match = _.find(res,function(v) {
+                        var activeSiteName = v['SITE.NAME'];
+
+                        if (!activeSiteName || activeSiteName.toLowerCase() !== siteName.toLowerCase()) {
+                            return false;
+                        } else {
+                            const bindingInfo = binding.ip + ':' + binding.port + ':' + binding.host;
+
+                            return v.bindings.toLowerCase().includes(bindingInfo.toLowerCase());
+                        }
+                    });
+                }
+
+                if (cb) {
+                    cb(err, !!match);
+                }
+                else {
+                    console.log(match);
+                }
+
+            });
+        },
+        deleteSiteBinding : function(options, cb) {
+            var self = this;
+            options = Object.assign({}, defaultBindingInfo, options);
 
             options.site = options.site || self.last_site;
 
             self.exists('site',options.site,function(err,tf) {
                 if (tf) {
-                    var site_cmd = ' set site /site.name:"' + options.site + '"';
-                    var bindingInfo = options.bindingInfo
-                        ? ' /+bindings.[' + options.bindingInfo + ']'
-                        :  (' /+bindings.[protocol=\'' + options.protocol
-                            + '\',bindingInformation=\'' + options.ip
-                            + ':' + options.port
-                            + ':' + options.host
-                            + '\']');
+                    var bindingInfo = options.bindingInfo || self.buildBindingInfo(options.protocol, options.ip, options.host, options.port);
+                    var site_cmd = ' set site /site.name:"' + options.site + '" /-bindings.['+bindingInfo+']';
 
-                    site_cmd += bindingInfo;
+                    exec(self.appcmd + ' ' + site_cmd, cb);
+                }
+            });
+        },
+        addSiteBinding : function(options,cb) {
+            var self = this;
+            options = Object.assign({}, defaultBindingInfo, options);
+
+            options.site = options.site || self.last_site;
+
+            self.exists('site',options.site,function(err,tf) {
+                if (tf) {
+                    var bindingInfo = options.bindingInfo || self.buildBindingInfo(options.protocol, options.ip, options.host, options.port);
+                    var site_cmd = ' set site /site.name:"' + options.site + '" /+bindings.['+bindingInfo+']';
 
                     exec(self.appcmd + ' ' + site_cmd,cb);
                 }
