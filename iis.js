@@ -35,7 +35,8 @@ var IIS = function() {
                 name : 'New Site',
                 protocol:'http',
                 host: '*',
-                port: '80'
+                port: '80',
+                ip: '*'
             };
 
             //hold this to be used when creating app folders, etc
@@ -45,7 +46,11 @@ var IIS = function() {
                 if (!tf) {
 
                     var site_cmd = ' add site /name:"' + options.name + '"';
-                    site_cmd += ' /bindings:' + (options.bindings || (options.protocol + '://' + options.host + ':' + options.port));
+                    site_cmd += ' /bindings:' + (options.bindings ||
+                            (options.protocol === 'https'
+                            ? options.protocol + '/' + options.ip + ':' + options.port + ':' + options.host
+                            : options.protocol + '://' + options.host + ':' + options.port)
+                        );
 
                     if (options.path) {
                         site_cmd += ' /physicalPath:"' + options.path + '"';
